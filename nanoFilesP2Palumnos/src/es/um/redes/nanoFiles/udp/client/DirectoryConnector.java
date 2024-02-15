@@ -5,8 +5,10 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.SocketException;
 import java.net.SocketTimeoutException;
 
+import es.um.redes.boletinUDP.UDPServer;
 import es.um.redes.nanoFiles.udp.message.DirMessage;
 import es.um.redes.nanoFiles.udp.message.DirMessageOps;
 import es.um.redes.nanoFiles.util.FileInfo;
@@ -57,16 +59,19 @@ public class DirectoryConnector {
 		 * dirección de socket (address:DIRECTORY_PORT) del directorio en el atributo
 		 * directoryAddress, para poder enviar datagramas a dicho destino.
 		 */
-		InetAddress addressNueva = (InetAddress) address;
-		directoryAddress = DIRECTORY_PORT;
 		/*
 		 * TODO: Crea el socket UDP en cualquier puerto para enviar datagramas al
 		 * directorio
-		 *
 		 */
-		DatagramSocket socket = new DatagramSocket();
-				
-
+		
+		// Pasa el address a un tipo InetAddress
+		InetAddress serverIp = InetAddress.getByName(address);
+		
+		// Guardar la dirección de socket del directorio en el atributo directoryAddress
+		directoryAddress = new InetSocketAddress(serverIp, DIRECTORY_PORT);
+		
+		// Creamos un socket UDP en cualquier puerto disponible
+		socket = new DatagramSocket();
 
 
 	}
@@ -76,21 +81,24 @@ public class DirectoryConnector {
 	 * 
 	 * @param requestData los datos a enviar al directorio (mensaje de solicitud)
 	 * @return los datos recibidos del directorio (mensaje de respuesta)
+	 * @throws IOException 
 	 */
-	private byte[] sendAndReceiveDatagrams(byte[] requestData) {
-		// ENVIAR MENSAJE
-        DatagramPacket peticion = new DatagramPacket(requestData, requestData.length, directoryAddress);
-        socket.send(peticion);
-        
-        // RECIBIR MENSAJE
-        DatagramPacket paqueteRecibido = new DatagramPacket(responseData, responseData.length);
-        socket.setSoTimeout(TIMEOUT);
-        socket.receive(paqueteRecibido);
-        String mensajeRecibido = new String(responseData, 0, paqueteRecibido.getLength());
-        response = mensajeRecibido.getBytes();
-        
-        
-        
+	private byte[] sendAndReceiveDatagrams(byte[] requestData) throws IOException {
+		byte responseData[] = new byte[DirMessage.PACKET_MAX_SIZE];
+		byte response[] = null;
+		if (directoryAddress == null) {
+			System.err.println("DirectoryConnector.sendAndReceiveDatagrams: UDP server destination address is null!");
+			System.err.println(
+					"DirectoryConnector.sendAndReceiveDatagrams: make sure constructor initializes field \"directoryAddress\"");
+			System.exit(-1);
+
+		}
+		if (socket == null) {
+			System.err.println("DirectoryConnector.sendAndReceiveDatagrams: UDP socket is null!");
+			System.err.println(
+					"DirectoryConnector.sendAndReceiveDatagrams: make sure constructor initializes field \"socket\"");
+			System.exit(-1);
+		}
 		/*
 		 * TODO: Enviar datos en un datagrama al directorio y recibir una respuesta. El
 		 * array devuelto debe contener únicamente los datos recibidos, *NO* el búfer de
@@ -114,7 +122,18 @@ public class DirectoryConnector {
 		 * SocketTimeoutException es más concreta que IOException.
 		 */
 
-
+		// ENVIAR MENSAJE
+		DatagramPacket peticion = new DatagramPacket(requestData, requestData.length, directoryAddress);
+		socket.send(peticion);
+		
+		// RECIBIR MENSAJE
+		DatagramPacket paqueteRecibido = new DatagramPacket(responseData, responseData.length);
+		socket.setSoTimeout(TIMEOUT);
+		socket.receive(paqueteRecibido);
+		String mensajeRecibido = new String(responseData, 0, paqueteRecibido.getLength());
+		response = mensajeRecibido.getBytes();
+		
+		
 
 		if (response != null && response.length == responseData.length) {
 			System.err.println("Your response is as large as the datagram reception buffer!!\n"
@@ -128,25 +147,29 @@ public class DirectoryConnector {
 	 * recepción de mensajes sin formatear ("en crudo")
 	 * 
 	 * @return verdadero si se ha enviado un datagrama y recibido una respuesta
+	 * @throws IOException 
 	 */
-	public boolean testSendAndReceive() {
-		byte[] mensaje="login";
+	public boolean testSendAndReceive() throws IOException {
+		/*
+		 * TODO: Probar el correcto funcionamiento de sendAndReceiveDatagrams. Se debe
+		 * enviar un datagrama con la cadena "login" y comprobar que la respuesta
+		 * recibida es "loginok". En tal caso, devuelve verdadero, falso si la respuesta
+		 * no contiene los datos esperados.
+		 */
+		boolean success = false;
+		
+		String mensaje = "login";
 		byte[] mensajeByte = mensaje.getBytes();
+		
 		byte[] respuesta = sendAndReceiveDatagrams(mensajeByte);
 		
-	    String loginRespuesta = "loginolk";
-	    byte[] loginok = loginRespuesta.getBytes();
-	        if (respuesta.equals(loginok)) {
-	            System.out.println("Test successful. Received expected response: " + responseString);
-	            return true;
-	        } else {
-	            System.err.println("Test failed. Received unexpected response: " + responseString);
-	        }
-	    } else {
-	        System.err.println("Test failed. Received null response.");
-	    }
-
-
+		
+		String loginRespuesta = "loginok";
+		byte[] loginok = loginRespuesta.getBytes();
+		
+		if(respuesta.equals(loginok)) {
+			success = true;
+		}
 		return success;
 	}
 

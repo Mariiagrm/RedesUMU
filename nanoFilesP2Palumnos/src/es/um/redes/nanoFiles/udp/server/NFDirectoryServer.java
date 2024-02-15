@@ -69,6 +69,11 @@ public class NFDirectoryServer {
 		 * TODO: (Boletín UDP) Inicializar el resto de atributos de esta clase
 		 * (estructuras de datos que mantiene el servidor: nicks, sessionKeys, etc.)
 		 */
+		socket = new DatagramSocket(DIRECTORY_PORT);
+		
+		nicks = new HashMap<String, Integer>();
+		
+		sessionKeys = new HashMap<Integer, String>();
 
 
 
@@ -89,7 +94,7 @@ public class NFDirectoryServer {
 		 * TODO: (Boletín UDP) Crear un búfer para recibir datagramas y un datagrama
 		 * asociado al búfer
 		 */
-
+		byte[] buffer = new byte[DirMessage.PACKET_MAX_SIZE];
 
 
 
@@ -98,14 +103,17 @@ public class NFDirectoryServer {
 		while (true) { // Bucle principal del servidor de directorio
 
 			// TODO: (Boletín UDP) Recibimos a través del socket un datagrama
-
+			DatagramPacket packetFromClient = new DatagramPacket(buffer, buffer.length);
+			socket.receive(packetFromClient);
+			
 			// TODO: (Boletín UDP) Establecemos dataLength con longitud del datagrama
 			// recibido
-
+			dataLength = packetFromClient.getData().length;
+			
 			// TODO: (Boletín UDP) Establecemos 'clientAddr' con la dirección del cliente,
 			// obtenida del
 			// datagrama recibido
-
+			clientAddr = (InetSocketAddress) packetFromClient.getSocketAddress();
 
 
 

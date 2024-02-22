@@ -71,7 +71,7 @@ public class NFDirectoryServer {
 		
 		 this.nicks= new HashMap<String, Integer>();
 		 this.sessionKeys= new HashMap<Integer, String> ();
-		 this.messageDiscardProbability=corruptionProbability;
+		 
 
 		if (NanoFiles.testMode) {
 			if (socket == null || nicks == null || sessionKeys == null) {
@@ -91,7 +91,8 @@ public class NFDirectoryServer {
 
 
 		// Reservamos buffer para recibir mensajes
-		byte[] recvBuf = new byte[DirMessage.PACKET_MAX_SIZE];
+		receptionBuffer = new byte[DirMessage.PACKET_MAX_SIZE];
+		DatagramPacket packetFromClient=new DatagramPacket(receptionBuffer, receptionBuffer.length );
 
 
 
@@ -99,14 +100,13 @@ public class NFDirectoryServer {
 
         while (true) { // Bucle principal del servidor de directorio
             //  (Boletín UDP) Recibimos a través del socket un datagrama
-            DatagramPacket receivedPacket = new DatagramPacket(recvBuf, recvBuf.length);
-            socket.receive(receivedPacket);
+            socket.receive(packetFromClient);
 
-            // TODO: (Boletín UDP) Establecemos dataLength con la longitud del datagrama recibido
-             dataLength = receivedPacket.getLength();
+            // (Boletín UDP) Establecemos dataLength con la longitud del datagrama recibido
+             dataLength = packetFromClient.getLength();
 
-            // TODO: (Boletín UDP) Establecemos 'clientAddr' con la dirección del cliente
-             clientAddr = receivedPacket.getAddress();
+            //(Boletín UDP) Establecemos 'clientAddr' con la dirección del cliente
+             clientAddr = packetFromClient.getAddress();
 
             if (NanoFiles.testMode) {
                 if (receptionBuffer == null || clientAddr == null || dataLength < 0) {
@@ -137,13 +137,20 @@ public class NFDirectoryServer {
                      * y no se envía ninguna respuesta.
                      */
                     if ("login".equals(messageFromClient)) {
-                        String responseMessage = "loginok";
-                        byte[] responseBuffer = responseMessage.getBytes();
-                        DatagramPacket responsePacket = new DatagramPacket(responseBuffer, responseBuffer.length,
-                                clientAddr, receivedPacket.getPort());
-                        socket.send(responsePacket);
+                        //Creamos el numero aleatorio que sera la sessionKey
+                    	Random random = new Random();
+                    	int sessionKey = random.nextInt(10000);
+                    	
+                    	//Creamos el mensaje de respuesta para enviar: "loginOk&NUM"
+                    	String response = "loginok&" + sessionKey;
+                    	byte[] responseData= response.getBytes();
+                    	
+                    	//Creamos un datagrama y lo enviamos al cliente
+                    	DatagramPacket packetToClient = new DatagramPacket(responseData, responseData.length);
+                    	socket.send(packetToClient);
+                    	System.out.println("PASSED! Sent loginok&"+sessionKey);
                     } else {
-                        System.err.println("Error: Unexpected message received - " + messageFromClient);
+                    	System.out.println("FAIL! Message was not equal to login");
                     }
 
                 } else { // Servidor funcionando en modo producción (mensajes bien formados)

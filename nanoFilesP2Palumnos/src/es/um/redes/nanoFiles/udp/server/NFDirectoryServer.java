@@ -5,6 +5,8 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
 import java.net.SocketException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Random;
@@ -94,7 +96,7 @@ public class NFDirectoryServer {
 		 * TODO: (Boletín UDP) Crear un búfer para recibir datagramas y un datagrama
 		 * asociado al búfer
 		 */
-		byte[] buffer = new byte[DirMessage.PACKET_MAX_SIZE];
+		receptionBuffer = new byte[DirMessage.PACKET_MAX_SIZE];
 
 
 
@@ -103,7 +105,7 @@ public class NFDirectoryServer {
 		while (true) { // Bucle principal del servidor de directorio
 
 			// TODO: (Boletín UDP) Recibimos a través del socket un datagrama
-			DatagramPacket packetFromClient = new DatagramPacket(buffer, buffer.length);
+			DatagramPacket packetFromClient = new DatagramPacket(receptionBuffer, receptionBuffer.length);
 			socket.receive(packetFromClient);
 			
 			// TODO: (Boletín UDP) Establecemos dataLength con longitud del datagrama
@@ -129,12 +131,15 @@ public class NFDirectoryServer {
 			// Analizamos la solicitud y la procesamos
 			if (dataLength > 0) {
 				String messageFromClient = null;
+				messageFromClient = new String(receptionBuffer, 0, packetFromClient.getLength());
 				/*
 				 * TODO: (Boletín UDP) Construir una cadena a partir de los datos recibidos en
 				 * el buffer de recepción
 				 */
-
-
+				String currentTime = new SimpleDateFormat("HH:mm:ss").format(new Date());
+				String messageToClient = new String(messageFromClient+" "+currentTime);
+				
+				byte[] dataToClient = messageToClient.getBytes();
 
 
 				if (NanoFiles.testMode) { // En modo de prueba (mensajes en "crudo", boletín UDP)
@@ -147,6 +152,22 @@ public class NFDirectoryServer {
 					 * y no se envía ninguna respuesta.
 					 */
 
+					String login = "login";
+					byte[] loginByte = login.getBytes();
+					byte[] mensajeRecibido = messageFromClient.getBytes();
+					if(messageFromClient.equals(login)) {
+						Random random = new Random();
+						int sessionKey = random.nextInt(10000);
+						
+						messageToClient = "loginok" + sessionKey;
+						dataToClient = messageToClient.getBytes();
+						DatagramPacket packetToClient = new DatagramPacket(dataToClient, dataToClient.length, clientAddr);
+						
+						socket.send(packetToClient);
+						System.out.println("Se ha mandado loginok&"+sessionKey);
+					} else {
+						System.out.println("El mensaje recibido no es login");
+					}
 
 
 				} else { // Servidor funcionando en modo producción (mensajes bien formados)

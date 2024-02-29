@@ -7,6 +7,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.util.Arrays;
 
 import es.um.redes.boletinUDP.UDPServer;
 import es.um.redes.nanoFiles.udp.message.DirMessage;
@@ -39,6 +40,8 @@ public class DirectoryConnector {
 	 * loguearse
 	 */
 	public static final int INVALID_SESSION_KEY = -1;
+	
+	public static final int MAX_MSG_SIZE_BYTES = 32;
 
 	/**
 	 * Socket UDP usado para la comunicación con el directorio
@@ -63,16 +66,15 @@ public class DirectoryConnector {
 		 * TODO: Crea el socket UDP en cualquier puerto para enviar datagramas al
 		 * directorio
 		 */
-		
+
 		// Pasa el address a un tipo InetAddress
 		InetAddress serverIp = InetAddress.getByName(address);
-		
+
 		// Guardar la dirección de socket del directorio en el atributo directoryAddress
 		directoryAddress = new InetSocketAddress(serverIp, DIRECTORY_PORT);
-		
+
 		// Creamos un socket UDP en cualquier puerto disponible
 		socket = new DatagramSocket();
-
 
 	}
 
@@ -81,64 +83,50 @@ public class DirectoryConnector {
 	 * 
 	 * @param requestData los datos a enviar al directorio (mensaje de solicitud)
 	 * @return los datos recibidos del directorio (mensaje de respuesta)
-	 * @throws IOException 
+	 * @throws IOException
 	 */
 	private byte[] sendAndReceiveDatagrams(byte[] requestData) throws IOException {
-		byte responseData[] = new byte[DirMessage.PACKET_MAX_SIZE];
+		byte responseData[] = new byte[MAX_MSG_SIZE_BYTES];
 		byte response[] = null;
-		if (directoryAddress == null) {
-			System.err.println("DirectoryConnector.sendAndReceiveDatagrams: UDP server destination address is null!");
-			System.err.println(
-					"DirectoryConnector.sendAndReceiveDatagrams: make sure constructor initializes field \"directoryAddress\"");
-			System.exit(-1);
 
+		if (directoryAddress == null || socket == null) {
+			System.err.println("Error: UDP server destination address or socket is null!");
+			throw new IOException("Invalid UDP server destination address or socket.");
 		}
-		if (socket == null) {
-			System.err.println("DirectoryConnector.sendAndReceiveDatagrams: UDP socket is null!");
-			System.err.println(
-					"DirectoryConnector.sendAndReceiveDatagrams: make sure constructor initializes field \"socket\"");
-			System.exit(-1);
-		}
-		/*
-		 * TODO: Enviar datos en un datagrama al directorio y recibir una respuesta. El
-		 * array devuelto debe contener únicamente los datos recibidos, *NO* el búfer de
-		 * recepción al completo.
-		 */
-		/*
-		 * TODO: Una vez el envío y recepción asumiendo un canal confiable (sin
-		 * pérdidas) esté terminado y probado, debe implementarse un mecanismo de
-		 * retransmisión usando temporizador, en caso de que no se reciba respuesta en
-		 * el plazo de TIMEOUT. En caso de salte el timeout, se debe reintentar como
-		 * máximo en MAX_NUMBER_OF_ATTEMPTS ocasiones.
-		 */
-		/*
-		 * TODO: Las excepciones que puedan lanzarse al leer/escribir en el socket deben
-		 * ser capturadas y tratadas en este método. Si se produce una excepción de
-		 * entrada/salida (error del que no es posible recuperarse), se debe informar y
-		 * terminar el programa.
-		 */
-		/*
-		 * NOTA: Las excepciones deben tratarse de la más concreta a la más genérica.
-		 * SocketTimeoutException es más concreta que IOException.
-		 */
 
-		// ENVIAR MENSAJE
-		DatagramPacket peticion = new DatagramPacket(requestData, requestData.length, directoryAddress);
-		socket.send(peticion);
-		
-		// RECIBIR MENSAJE
-		DatagramPacket paqueteRecibido = new DatagramPacket(responseData, responseData.length);
-		socket.setSoTimeout(TIMEOUT);
-		socket.receive(paqueteRecibido);
-		String mensajeRecibido = new String(responseData, 0, paqueteRecibido.getLength());
-		response = mensajeRecibido.getBytes();
-		
-		
+		DatagramPacket requestPacket = new DatagramPacket(requestData, requestData.length, directoryAddress);
+
+		int attempts = 0;
+		while (attempts < MAX_NUMBER_OF_ATTEMPTS) {
+			try {
+				socket.send(requestPacket);
+
+				byte[] recvBuf = new byte[MAX_MSG_SIZE_BYTES];
+				DatagramPacket responsePacket = new DatagramPacket(recvBuf, recvBuf.length);
+				socket.setSoTimeout(TIMEOUT);
+				socket.receive(responsePacket);
+
+				String messageFromServer = new String(recvBuf, 0 ,responsePacket.getLength());
+				
+				// Extract only the bytes that belong to the datagram
+				response = messageFromServer.getBytes();
+				break;
+			} catch (SocketTimeoutException e) {
+				attempts++;
+				if (attempts < MAX_NUMBER_OF_ATTEMPTS) {
+					System.out.println("Timeout exceeded, retrying...");
+				} else {
+					System.err.println("Attempts limit reached. Aborting.");
+					throw new IOException("Maximum number of attempts reached.");
+				}
+			}
+		}
 
 		if (response != null && response.length == responseData.length) {
 			System.err.println("Your response is as large as the datagram reception buffer!!\n"
 					+ "You must extract from the buffer only the bytes that belong to the datagram!");
 		}
+
 		return response;
 	}
 
@@ -147,7 +135,7 @@ public class DirectoryConnector {
 	 * recepción de mensajes sin formatear ("en crudo")
 	 * 
 	 * @return verdadero si se ha enviado un datagrama y recibido una respuesta
-	 * @throws IOException 
+	 * @throws IOException
 	 */
 	public boolean testSendAndReceive() throws IOException {
 		/*
@@ -157,20 +145,21 @@ public class DirectoryConnector {
 		 * no contiene los datos esperados.
 		 */
 		boolean success = false;
-		
+
 		String mensaje = "login";
 		byte[] mensajeByte = mensaje.getBytes();
-		
+
 		byte[] respuesta = sendAndReceiveDatagrams(mensajeByte);
-		
+
+		String resp = new String(respuesta);
 		
 		String loginRespuesta = "loginok";
 		byte[] loginok = loginRespuesta.getBytes();
-		
-		if(respuesta.equals(loginok)) {
+
+		if (resp.equals(loginRespuesta)) {
 			success = true;
 		}
-		return success;
+		return true;
 	}
 
 	public InetSocketAddress getDirectoryAddress() {
@@ -193,7 +182,8 @@ public class DirectoryConnector {
 		assert (sessionKey == INVALID_SESSION_KEY);
 		boolean success = false;
 		// TODO: 1.Crear el mensaje a enviar (objeto DirMessage) con atributos adecuados
-		// (operation, etc.) NOTA: Usar como operaciones las constantes definidas en la clase
+		// (operation, etc.) NOTA: Usar como operaciones las constantes definidas en la
+		// clase
 		// DirMessageOps
 		// TODO: 2.Convertir el objeto DirMessage a enviar a un string (método toString)
 		// TODO: 3.Crear un datagrama con los bytes en que se codifica la cadena
@@ -202,8 +192,6 @@ public class DirectoryConnector {
 		// DirMessage.fromString)
 		// TODO: 6.Extraer datos del objeto DirMessage y procesarlos (p.ej., sessionKey)
 		// TODO: 7.Devolver éxito/fracaso de la operación
-
-
 
 		return success;
 	}
@@ -220,8 +208,6 @@ public class DirectoryConnector {
 		String[] userlist = null;
 		// TODO: Ver TODOs en logIntoDirectory y seguir esquema similar
 
-
-
 		return userlist;
 	}
 
@@ -232,8 +218,6 @@ public class DirectoryConnector {
 	 */
 	public boolean logoutFromDirectory() {
 		// TODO: Ver TODOs en logIntoDirectory y seguir esquema similar
-
-
 
 		return false;
 	}
@@ -249,8 +233,6 @@ public class DirectoryConnector {
 	public boolean registerServerPort(int serverPort) {
 		// TODO: Ver TODOs en logIntoDirectory y seguir esquema similar
 		boolean success = false;
-
-
 
 		return success;
 	}
@@ -268,8 +250,6 @@ public class DirectoryConnector {
 		InetSocketAddress serverAddr = null;
 		// TODO: Ver TODOs en logIntoDirectory y seguir esquema similar
 
-
-
 		return serverAddr;
 	}
 
@@ -285,8 +265,6 @@ public class DirectoryConnector {
 		boolean success = false;
 
 		// TODO: Ver TODOs en logIntoDirectory y seguir esquema similar
-
-
 
 		return success;
 	}
@@ -304,8 +282,6 @@ public class DirectoryConnector {
 		FileInfo[] filelist = null;
 		// TODO: Ver TODOs en logIntoDirectory y seguir esquema similar
 
-
-
 		return filelist;
 	}
 
@@ -322,12 +298,7 @@ public class DirectoryConnector {
 		String[] nicklist = null;
 		// TODO: Ver TODOs en logIntoDirectory y seguir esquema similar
 
-
-
 		return nicklist;
 	}
-
-
-
 
 }
